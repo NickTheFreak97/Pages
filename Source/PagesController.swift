@@ -2,6 +2,7 @@ import UIKit
 
 @objc(HYPPagesControllerDelegate) public protocol PagesControllerDelegate {
   func pageViewController(_ pageViewController: UIPageViewController,
+                          fromViewController startingViewController: UIViewController?,
                           setViewController viewController: UIViewController,
                           atPage page: Int)
 }
@@ -14,7 +15,7 @@ import UIKit
   }
 
   public let startPage = 0
-  @objc public var setNavigationTitle = true
+  public var setNavigationTitle = true
 
   public var enableSwipe = true {
     didSet {
@@ -35,7 +36,7 @@ import UIKit
     return pages.count
   }
 
-  @objc public private(set) var currentIndex = 0
+  public private(set) var currentIndex = 0
   public weak var pagesDelegate: PagesControllerDelegate?
 
   public private(set) lazy var bottomLineView: UIView = {
@@ -49,11 +50,18 @@ import UIKit
 
   public private(set) var pageControl: UIPageControl?
 
-    public convenience override init(transitionStyle style: UIPageViewController.TransitionStyle, navigationOrientation: UIPageViewController.NavigationOrientation, options: [UIPageViewController.OptionsKey : Any]? = nil) {
-        self.init(transitionStyle: style, navigationOrientation: navigationOrientation, options: options)
-        add(pages)
-    }
-    
+  public convenience init(_ pages: [UIViewController],
+                          transitionStyle: UIPageViewController.TransitionStyle = .scroll,
+                          navigationOrientation: UIPageViewController.NavigationOrientation = .horizontal,
+                          options: [UIPageViewController.OptionsKey : Any]? = nil) {
+    self.init(
+      transitionStyle: transitionStyle,
+      navigationOrientation: navigationOrientation,
+      options: options
+    )
+
+    add(pages)
+  }
 
   open override func viewDidLoad() {
     super.viewDidLoad()
@@ -63,7 +71,7 @@ import UIKit
 
     view.addSubview(bottomLineView)
     addConstraints()
-    view.bringSubviewToFront(bottomLineView)
+      view.bringSubviewToFront(bottomLineView)
     goTo(startPage)
   }
 
@@ -81,7 +89,8 @@ import UIKit
 
   open func goTo(_ index: Int) {
     if index >= 0 && index < pages.count {
-      let direction: UIPageViewController.NavigationDirection = (index > currentIndex) ? .forward : .reverse
+        let direction: UIPageViewController.NavigationDirection = (index > currentIndex) ? .forward : .reverse
+        let current = pages[self.currentIndex]
       let viewController = pages[index]
       currentIndex = index
 
@@ -92,6 +101,7 @@ import UIKit
         completion: { [unowned self] finished in
           self.pagesDelegate?.pageViewController(
             self,
+            fromViewController: current,
             setViewController: viewController,
             atPage: self.currentIndex
           )
@@ -111,7 +121,7 @@ import UIKit
     goTo(currentIndex - 1)
   }
 
-    @objc dynamic open func add(_ viewControllers: [UIViewController]) {
+  open func add(_ viewControllers: [UIViewController]) {
     for viewController in viewControllers {
       addViewController(viewController)
     }
@@ -161,6 +171,8 @@ extension PagesController: UIPageViewControllerDelegate {
       return
     }
 
+    let currentViewController = self.pages[self.currentIndex]
+      
     currentIndex = index
 
     if setNavigationTitle {
@@ -171,7 +183,12 @@ extension PagesController: UIPageViewControllerDelegate {
       pageControl.currentPage = currentIndex
     }
 
-    pagesDelegate?.pageViewController(self, setViewController: pages[currentIndex], atPage: currentIndex)
+    pagesDelegate?.pageViewController(
+        self,
+        fromViewController: currentViewController,
+        setViewController: pages[currentIndex],
+        atPage: currentIndex
+    )
   }
 }
 
@@ -199,7 +216,9 @@ private extension PagesController {
         direction: .forward,
         animated: true,
         completion: { [unowned self] finished in
-          self.pagesDelegate?.pageViewController(self,
+          self.pagesDelegate?.pageViewController(
+            self,
+            fromViewController: nil,
             setViewController: viewController,
             atPage: self.currentIndex)
         })
@@ -225,5 +244,14 @@ private extension PagesController {
     view.addConstraint(NSLayoutConstraint(item: bottomLineView, attribute: .height,
       relatedBy: .equal, toItem: nil, attribute: .notAnAttribute,
       multiplier: 1, constant: Dimensions.bottomLineHeight))
+  }
+}
+
+// MARK: - Storyboard
+
+extension PagesController {
+  public convenience init(_ storyboardIds: [String], storyboard: UIStoryboard = .Main) {
+    let pages = storyboardIds.map(storyboard.instantiateViewController(withIdentifier:))
+    self.init(pages)
   }
 }

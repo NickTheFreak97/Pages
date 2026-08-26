@@ -17,6 +17,7 @@ open class PagesController: UIPageViewController {
         static let bottomLineHeight: CGFloat = 1.0
         static let bottomLineSideMargin: CGFloat = 40.0
         static let bottomLineBottomMargin: CGFloat = 36.0
+        static let pageControlBottomMargin: CGFloat = 8.0
     }
 
     public let startPage = 0
@@ -36,7 +37,7 @@ open class PagesController: UIPageViewController {
 
     public var showPageControl = true {
         didSet {
-            pageControl?.isHidden = !showPageControl
+            updatePageControl()
             updateBottomControlsInset()
         }
     }
@@ -56,13 +57,26 @@ open class PagesController: UIPageViewController {
     public private(set) lazy var bottomLineView: UIView = {
         let view = UIView()
         view.translatesAutoresizingMaskIntoConstraints = false
-        view.backgroundColor = UIColor.white
+        view.backgroundColor = .white
         view.alpha = 0.4
         view.isHidden = true
         return view
     }()
 
-    public private(set) var pageControl: UIPageControl?
+    public private(set) lazy var pageControl: UIPageControl = {
+        let control = UIPageControl()
+
+        control.translatesAutoresizingMaskIntoConstraints = false
+        control.backgroundColor = .clear
+        control.isOpaque = false
+        control.hidesForSinglePage = true
+
+        if #available(iOS 14.0, *) {
+            control.backgroundStyle = .minimal
+        }
+
+        return control
+    }()
 
     private lazy var pages = Array<UIViewController>()
 
@@ -88,26 +102,41 @@ open class PagesController: UIPageViewController {
         dataSource = self
 
         view.addSubview(bottomLineView)
+        view.addSubview(pageControl)
 
         addConstraints()
 
         view.bringSubviewToFront(bottomLineView)
+        view.bringSubviewToFront(pageControl)
 
+        updatePageControlAppearance()
         goTo(startPage)
-    }
-
-    open override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-
-        findPageControl()
+        updatePageControl()
         updateBottomControlsInset()
     }
 
     open override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
-        findPageControl()
+        view.bringSubviewToFront(bottomLineView)
+        view.bringSubviewToFront(pageControl)
+
         updateBottomControlsInset()
+    }
+
+    open override func traitCollectionDidChange(
+        _ previousTraitCollection: UITraitCollection?
+    ) {
+        super.traitCollectionDidChange(previousTraitCollection)
+
+        guard
+            previousTraitCollection?.userInterfaceStyle
+                != traitCollection.userInterfaceStyle
+        else {
+            return
+        }
+
+        updatePageControlAppearance()
     }
 
     open func goTo(_ index: Int) {
@@ -144,6 +173,8 @@ open class PagesController: UIPageViewController {
         if setNavigationTitle {
             title = viewController.title
         }
+
+        updatePageControl()
     }
 
     @objc open func moveForward() {
@@ -182,13 +213,13 @@ extension PagesController: UIPageViewControllerDataSource {
     @objc open func presentationCount(
         for pageViewController: UIPageViewController
     ) -> Int {
-        showPageControl ? pages.count : 0
+        0
     }
 
     @objc open func presentationIndex(
         for pageViewController: UIPageViewController
     ) -> Int {
-        showPageControl ? currentIndex : 0
+        0
     }
 }
 
@@ -220,8 +251,7 @@ extension PagesController: UIPageViewControllerDelegate {
             title = viewController.title
         }
 
-        pageControl?.currentPage = currentIndex
-
+        updatePageControl()
         updateBottomControlsInset()
 
         pagesDelegate?.pageViewController(
@@ -250,62 +280,38 @@ private extension PagesController {
         }
     }
 
-    func findPageControl() {
-        guard pageControl == nil else {
-            configurePageControl()
-            return
+    private func updatePageControlAppearance() {
+        let color: UIColor
+
+        if #available(iOS 13.0, *) {
+            color = traitCollection.userInterfaceStyle == .dark
+                ? .white
+                : .black
+        } else {
+            color = .black
         }
 
-        func find(in view: UIView) -> UIPageControl? {
-            if let pageControl = view as? UIPageControl {
-                return pageControl
-            }
-
-            for subview in view.subviews {
-                if let pageControl = find(in: subview) {
-                    return pageControl
-                }
-            }
-
-            return nil
-        }
-
-        guard let pageControl = find(in: view) else {
-            return
-        }
-
-        self.pageControl = pageControl
-
-        configurePageControl()
-    }
-
-    func configurePageControl() {
-        guard let pageControl else {
-            return
-        }
-
-        pageControl.backgroundColor = .clear
-        pageControl.isOpaque = false
+        pageControl.pageIndicatorTintColor = color.withAlphaComponent(0.25)
+        pageControl.currentPageIndicatorTintColor = color.withAlphaComponent(0.9)
 
         if #available(iOS 14.0, *) {
             pageControl.backgroundStyle = .minimal
         }
 
-        view.bringSubviewToFront(pageControl)
+        pageControl.setNeedsDisplay()
+        pageControl.setNeedsLayout()
+    }
+
+
+
+    func updatePageControl() {
+        pageControl.numberOfPages = pages.count
+        pageControl.currentPage = currentIndex
+        pageControl.isHidden = !showPageControl || pages.count <= 1
     }
 
     func updateBottomControlsInset() {
-        guard showPageControl else {
-            updateBottomControlsInset(to: 0)
-            return
-        }
-
-        guard let pageControl else {
-            updateBottomControlsInset(to: 0)
-            return
-        }
-
-        guard !pageControl.isHidden else {
+        guard showPageControl, !pageControl.isHidden else {
             updateBottomControlsInset(to: 0)
             return
         }
@@ -367,53 +373,31 @@ private extension PagesController {
     }
 
     func addConstraints() {
-        view.addConstraint(
-            NSLayoutConstraint(
-                item: bottomLineView,
-                attribute: .bottom,
-                relatedBy: .equal,
-                toItem: view,
-                attribute: .bottom,
-                multiplier: 1,
+        NSLayoutConstraint.activate([
+            bottomLineView.bottomAnchor.constraint(
+                equalTo: view.bottomAnchor,
                 constant: -Dimensions.bottomLineBottomMargin
-            )
-        )
-
-        view.addConstraint(
-            NSLayoutConstraint(
-                item: bottomLineView,
-                attribute: .left,
-                relatedBy: .equal,
-                toItem: view,
-                attribute: .left,
-                multiplier: 1,
+            ),
+            bottomLineView.leftAnchor.constraint(
+                equalTo: view.leftAnchor,
                 constant: Dimensions.bottomLineSideMargin
-            )
-        )
-
-        view.addConstraint(
-            NSLayoutConstraint(
-                item: bottomLineView,
-                attribute: .right,
-                relatedBy: .equal,
-                toItem: view,
-                attribute: .right,
-                multiplier: 1,
+            ),
+            bottomLineView.rightAnchor.constraint(
+                equalTo: view.rightAnchor,
                 constant: -Dimensions.bottomLineSideMargin
-            )
-        )
+            ),
+            bottomLineView.heightAnchor.constraint(
+                equalToConstant: Dimensions.bottomLineHeight
+            ),
 
-        view.addConstraint(
-            NSLayoutConstraint(
-                item: bottomLineView,
-                attribute: .height,
-                relatedBy: .equal,
-                toItem: nil,
-                attribute: .notAnAttribute,
-                multiplier: 1,
-                constant: Dimensions.bottomLineHeight
+            pageControl.centerXAnchor.constraint(
+                equalTo: view.centerXAnchor
+            ),
+            pageControl.bottomAnchor.constraint(
+                equalTo: view.bottomAnchor,
+                constant: -Dimensions.pageControlBottomMargin
             )
-        )
+        ])
     }
 }
 

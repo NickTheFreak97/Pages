@@ -106,6 +106,7 @@ open class PagesController: UIPageViewController {
     open override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
+        findPageControl()
         updateBottomControlsInset()
     }
 
@@ -251,26 +252,60 @@ private extension PagesController {
 
     func findPageControl() {
         guard pageControl == nil else {
+            configurePageControl()
             return
         }
 
-        for subview in view.subviews {
-            if let pageControl = subview as? UIPageControl {
-                self.pageControl = pageControl
-                break
+        func find(in view: UIView) -> UIPageControl? {
+            if let pageControl = view as? UIPageControl {
+                return pageControl
             }
+
+            for subview in view.subviews {
+                if let pageControl = find(in: subview) {
+                    return pageControl
+                }
+            }
+
+            return nil
         }
+
+        guard let pageControl = find(in: view) else {
+            return
+        }
+
+        self.pageControl = pageControl
+
+        configurePageControl()
+    }
+
+    func configurePageControl() {
+        guard let pageControl else {
+            return
+        }
+
+        pageControl.backgroundColor = .clear
+        pageControl.isOpaque = false
+
+        if #available(iOS 14.0, *) {
+            pageControl.backgroundStyle = .minimal
+        }
+
+        view.bringSubviewToFront(pageControl)
     }
 
     func updateBottomControlsInset() {
-        findPageControl()
+        guard showPageControl else {
+            updateBottomControlsInset(to: 0)
+            return
+        }
 
         guard let pageControl else {
             updateBottomControlsInset(to: 0)
             return
         }
 
-        guard showPageControl else {
+        guard !pageControl.isHidden else {
             updateBottomControlsInset(to: 0)
             return
         }

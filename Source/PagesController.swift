@@ -144,6 +144,10 @@ open class PagesController: UIPageViewController {
             return
         }
 
+        guard index != currentIndex else {
+            return
+        }
+
         let direction: UIPageViewController.NavigationDirection =
             index > currentIndex ? .forward : .reverse
 
